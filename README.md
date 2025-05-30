@@ -1,2 +1,2 @@
 # ks-apiserver-proxy
-> Forwarding regarding the ks-apiserver service and the integration of certain business logics
+> Forwarding in relation to the ks-apiserver service and the integration of specific business logics. It provides services to Control Hub and Dashboard.
