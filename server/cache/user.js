@@ -5,7 +5,9 @@ const cache = {};
 const ADMIN_ROLE = 'platform-admin';
 
 const systemNamespaces = [
-	'os-system',
+	'os-network',
+	'os-platform',
+	'os-framework',
 	'kubesphere-monitoring-federated',
 	'kubesphere-controls-system',
 	'kubesphere-system',
@@ -15,7 +17,7 @@ const systemNamespaces = [
 	'kube-system',
 	'kube-public',
 	'kube-node-lease',
-	'gpu-system'
+	'os-gpu'
 ];
 
 const resources_filter = (ctx, query) => {
