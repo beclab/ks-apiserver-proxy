@@ -22,6 +22,7 @@ const {
 	getClusterRole,
 	getGitOpsEngine,
 	getMyApps,
+	getSystemIFS,
 	getAllMetric,
 	getUserMetric,
 	getClusterMetric,
@@ -71,6 +72,11 @@ const userDetail = async (ctx) => {
 
 const appList = async (ctx) => {
 	const data = await getMyApps(ctx);
+	ctx.body = data;
+};
+
+const systemIFS = async (ctx) => {
+	const data = await getSystemIFS(ctx);
 	ctx.body = data;
 };
 
@@ -283,6 +289,7 @@ module.exports = {
 	userDetail,
 	cacheUser,
 	appList,
+	systemIFS,
 	monitoringMetric,
 	namespaceGroup
 };

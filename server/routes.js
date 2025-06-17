@@ -8,6 +8,7 @@ const {
 	userDetail,
 	cacheUser,
 	appList,
+	systemIFS,
 	monitoringMetric,
 	namespaceGroup
 } = require('./controllers/view');
@@ -17,6 +18,7 @@ const router = new Router();
 router
 	.get('/capi/app/detail', userDetail)
 	.get('/capi/app/myapps', appList)
+	.get('/capi/system/ifs', systemIFS)
 
 	.all('/(k)?api(s)?/(.*)', cacheUser)
 	.use(proxy('/(k)?api(s)?/(.*)', k8sResourceProxy))
