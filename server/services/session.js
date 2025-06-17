@@ -22,7 +22,7 @@ const isEmpty = require('lodash/isEmpty');
 const isArray = require('lodash/isArray');
 const jwtDecode = require('jwt-decode');
 
-const { send_gateway_request } = require('../libs/request');
+const { send_gateway_request, send_gateway_request_system } = require('../libs/request');
 
 const {
 	isAppsRoute,
@@ -319,6 +319,21 @@ const getMyApps = async (ctx) => {
 	return data.data;
 };
 
+const getSystemIFS = async (ctx) => {
+	const params = ctx.query || {};
+	const data = await send_gateway_request_system({
+		method: 'GET',
+		url: '/system/ifs',
+		headers: {
+			'X-Signature': 'did jws'
+		},
+		params
+	});
+	console.log('getSystemIFS', data)
+	return data.data;
+};
+
+
 const getClusterMetric = async (ctx, params) => {
 	const token = ctx.cookies.get('auth_token');
 	return await send_gateway_request({
@@ -421,6 +436,22 @@ const createUser = (params, token) => {
 	});
 };
 
+const getSystemNamespaces = () => [
+	'os-platform',
+	'os-network',
+	'os-framework',
+	'os-gpu',
+	'kubesphere-monitoring-federated',
+	'kubesphere-controls-system',
+	'kubesphere-system',
+	'kubesphere-monitoring-system',
+	'kubekey-system',
+	'kube-system',
+	'kube-public',
+	'kube-node-lease',
+	'default',
+	]
+
 module.exports = {
 	login,
 	oAuthLogin,
@@ -432,9 +463,11 @@ module.exports = {
 	getClusterRole,
 	getGitOpsEngine,
 	getMyApps,
+	getSystemIFS,
 	getAllMetric,
 	getUserMetric,
 	getClusterMetric,
 	getUsers,
-	getNamespaces
+	getNamespaces,
+	getSystemNamespaces
 };

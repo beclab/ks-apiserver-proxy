@@ -59,6 +59,26 @@ const send_gateway_request = ({
 	);
 };
 
+const send_gateway_request_system = ({
+	method,
+	url,
+	params,
+	token,
+	headers = {},
+	...rest
+}) => {
+	const options = { ...rest };
+
+	options.headers = {
+		'X-Signature': 'did jws'
+	};
+	return request[method.toLowerCase()](
+		`http://${process.env.TERMINUSD_HOST}${url}`,
+		params,
+		options
+	);
+};
+
 const send_dockerhub_request = ({ params, path, headers }) => {
 	const httpsAgent = new https.Agent({
 		lookup: (host, options, cb) => {
@@ -157,5 +177,21 @@ const send_harbor_request = ({ path, params }) => {
 module.exports = {
 	send_gateway_request,
 	send_dockerhub_request,
-	send_harbor_request
+	send_harbor_request,
+	send_gateway_request_system
 };
+function getOptions(headers, rest, token) {
+	const options = { headers, ...rest };
+
+	if (token) {
+		options.headers = {
+			Authorization: `Bearer ${token}`,
+			'content-type': headers['content-type'] || 'application/json',
+			'x-client-ip': headers['x-client-ip'],
+			Cookie: `auth_token=${token}`,
+			'X-Authorization': token
+		};
+	}
+	return options;
+}
+

@@ -22,11 +22,13 @@ const {
 	getClusterRole,
 	getGitOpsEngine,
 	getMyApps,
+	getSystemIFS,
 	getAllMetric,
 	getUserMetric,
 	getClusterMetric,
 	getUsers,
-	getNamespaces
+	getNamespaces,
+	getSystemNamespaces
 } = require('../services/session');
 const {
 	setUserInfo,
@@ -54,16 +56,17 @@ const userDetail = async (ctx) => {
 		getCurrentUser(ctx, clusterRole, false),
 		getK8sRuntime(ctx),
 		getGitOpsEngine(ctx)
-
 	]);
 
 	const localeManifest = getLocaleManifest();
+	const systemNamespaces = getSystemNamespaces()
 
 	const data = {
 		localeManifest,
 		user,
 		runtime,
 		clusterRole,
+		systemNamespaces
 	};
 
 	ctx.body = data;
@@ -71,6 +74,11 @@ const userDetail = async (ctx) => {
 
 const appList = async (ctx) => {
 	const data = await getMyApps(ctx);
+	ctx.body = data;
+};
+
+const systemIFS = async (ctx) => {
+	const data = await getSystemIFS(ctx);
 	ctx.body = data;
 };
 
@@ -283,6 +291,7 @@ module.exports = {
 	userDetail,
 	cacheUser,
 	appList,
+	systemIFS,
 	monitoringMetric,
 	namespaceGroup
 };
