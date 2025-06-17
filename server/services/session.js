@@ -436,6 +436,22 @@ const createUser = (params, token) => {
 	});
 };
 
+const getSystemNamespaces = () => [
+	'os-platform',
+	'os-network',
+	'os-framework',
+	'os-gpu',
+	'kubesphere-monitoring-federated',
+	'kubesphere-controls-system',
+	'kubesphere-system',
+	'kubesphere-monitoring-system',
+	'kubekey-system',
+	'kube-system',
+	'kube-public',
+	'kube-node-lease',
+	'default',
+	]
+
 module.exports = {
 	login,
 	oAuthLogin,
@@ -452,5 +468,6 @@ module.exports = {
 	getUserMetric,
 	getClusterMetric,
 	getUsers,
-	getNamespaces
+	getNamespaces,
+	getSystemNamespaces
 };

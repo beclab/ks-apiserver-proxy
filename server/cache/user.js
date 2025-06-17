@@ -1,24 +1,11 @@
 const { isUndefined } = require('lodash');
 const get = require('lodash/get');
+const { getSystemNamespaces } = require('../services/session');
 
 const cache = {};
 const ADMIN_ROLE = 'platform-admin';
 
-const systemNamespaces = [
-	'os-network',
-	'os-platform',
-	'os-framework',
-	'kubesphere-monitoring-federated',
-	'kubesphere-controls-system',
-	'kubesphere-system',
-	'kubesphere-monitoring-system',
-	'kubekey-system',
-	'default',
-	'kube-system',
-	'kube-public',
-	'kube-node-lease',
-	'os-gpu'
-];
+const systemNamespaces = getSystemNamespaces()
 
 const resources_filter = (ctx, query) => {
 	const user = getUserInfo(ctx);

@@ -27,7 +27,8 @@ const {
 	getUserMetric,
 	getClusterMetric,
 	getUsers,
-	getNamespaces
+	getNamespaces,
+	getSystemNamespaces
 } = require('../services/session');
 const {
 	setUserInfo,
@@ -55,16 +56,17 @@ const userDetail = async (ctx) => {
 		getCurrentUser(ctx, clusterRole, false),
 		getK8sRuntime(ctx),
 		getGitOpsEngine(ctx)
-
 	]);
 
 	const localeManifest = getLocaleManifest();
+	const systemNamespaces = getSystemNamespaces()
 
 	const data = {
 		localeManifest,
 		user,
 		runtime,
 		clusterRole,
+		systemNamespaces
 	};
 
 	ctx.body = data;
