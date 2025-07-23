@@ -21,7 +21,7 @@ const uniq = require('lodash/uniq');
 const isEmpty = require('lodash/isEmpty');
 const isArray = require('lodash/isArray');
 const jwtDecode = require('jwt-decode');
-const { ownerToGlobalRole } = require('../cache/user')
+const { ownerToGlobalRole, isAdmin } = require('../cache/user.js');
 
 const { send_gateway_request, send_gateway_request_system } = require('../libs/request');
 
@@ -189,7 +189,7 @@ const getUserDetail = async (token, clusterRole, isMulticluster) => {
 		resp,
 		'metadata.annotations["bytetrade.io/owner-role"]'
 	)
-	console.log('ownerToGlobalRole', ownerToGlobalRole)
+	console.log('ownerToGlobalRole', ownerToGlobalRole, isAdmin)
 
 	const globalrole = ownerToGlobalRole(ownerRole);
 
