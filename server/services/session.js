@@ -21,6 +21,7 @@ const uniq = require('lodash/uniq');
 const isEmpty = require('lodash/isEmpty');
 const isArray = require('lodash/isArray');
 const jwtDecode = require('jwt-decode');
+const { ownerToGlobalRole } = require('../cache/user')
 
 const { send_gateway_request, send_gateway_request_system } = require('../libs/request');
 
@@ -184,16 +185,18 @@ const getUserDetail = async (token, clusterRole, isMulticluster) => {
 		url: `/kapis/iam.kubesphere.io/v1alpha2/users/${username}`,
 		token
 	});
+	const ownerRole = get(
+		resp,
+		'metadata.annotations["bytetrade.io/owner-role"]'
+	)
+	const globalrole = ownerToGlobalRole(ownerRole);
 
 	if (resp) {
 		user = {
 			email: get(resp, 'spec.email'),
 			lang: get(resp, 'spec.lang'),
 			username: get(resp, 'metadata.name'),
-			globalrole: get(
-				resp,
-				'metadata.annotations["iam.kubesphere.io/globalrole"]'
-			),
+			globalrole,
 			grantedClusters: get(
 				resp,
 				'metadata.annotations["iam.kubesphere.io/granted-clusters"]',
