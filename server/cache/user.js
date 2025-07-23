@@ -163,6 +163,5 @@ module.exports = {
 	checkUrl,
 	isAdmin,
 	canModify,
-	namespaceFormat,
-	ownerToGlobalRole
+	namespaceFormat
 };
