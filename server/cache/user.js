@@ -155,7 +155,7 @@ const canModify = (ctx, pathname) => {
 	return !isAdmin(ctx) && !isUndefined(checkUrl(pathname)?.resFormat);
 };
 
-const ownerToGlobalRole = (role) => {
+function ownerToGlobalRole (role) {
 	if (role === ADMIN || role === OWNER) {
 		return ADMIN_ROLE;
 	}
