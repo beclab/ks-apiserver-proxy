@@ -1,11 +1,9 @@
 const { isUndefined } = require('lodash');
 const get = require('lodash/get');
 const { getSystemNamespaces } = require('../services/session');
+const { ADMIN_ROLE } = require('./user.config');
 
 const cache = {};
-const ADMIN = 'admin'
-const OWNER = 'owner';
-const ADMIN_ROLE = 'platform-admin';
 
 const systemNamespaces = getSystemNamespaces()
 
@@ -155,17 +153,11 @@ const canModify = (ctx, pathname) => {
 	return !isAdmin(ctx) && !isUndefined(checkUrl(pathname)?.resFormat);
 };
 
-function ownerToGlobalRole (role) {
-	if (role === ADMIN || role === OWNER) {
-		return ADMIN_ROLE;
-	}
-	return role;
-};
+
 
 module.exports = {
 	setUserInfo,
 	getUserInfo,
-	ADMIN_ROLE,
 	namespaceList,
 	systemNamespaces,
 	checkUrl,
