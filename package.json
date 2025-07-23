@@ -57,7 +57,6 @@
     "copy-webpack-plugin": "^11.0.0",
     "cross-env": "^7.0.3",
     "nodemon": "^2.0.21",
-    "rimraf": "^6.0.1",
     "webpack": "^5.76.1",
     "webpack-cli": "^5.0.1"
   }
