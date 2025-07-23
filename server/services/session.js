@@ -189,6 +189,8 @@ const getUserDetail = async (token, clusterRole, isMulticluster) => {
 		resp,
 		'metadata.annotations["bytetrade.io/owner-role"]'
 	)
+	console.log('ownerToGlobalRole', ownerToGlobalRole)
+
 	const globalrole = ownerToGlobalRole(ownerRole);
 
 	if (resp) {
