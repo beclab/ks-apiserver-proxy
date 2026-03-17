@@ -109,7 +109,7 @@ const monitoringMetric = async (ctx) => {
 	let cluster_cpu_total_target = {};
 	let cluster_memory_total_target = {};
 	const user = getUserInfo(ctx);
-	const checkAdmin = isAdmin(ctx) && user.username === type;
+	const checkAdmin = isAdmin(ctx);
 	console.log('checkAdmin', checkAdmin);
 	if (type === 'cluster') {
 		params.metrics_filter =
