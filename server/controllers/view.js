@@ -215,45 +215,81 @@ function endsWith(str, name) {
 	return regex.test(str);
 }
 
-const namespaceGroup = async (ctx) => {
-	const namespaces = await getNamespaces(ctx);
-	const users = await getUsers(ctx)
+function buildNamespaceGroupBuckets(items, usersData) {
+	const shared = [];
+	const system = [];
+	const userBuckets = new Map(usersData.map((u) => [u.name, []]));
 
-	const originalData = namespaceFormat(
-		ctx.req,
-		namespaces,
-	);
-
-	const SYSTEM = 'System'
-	const usersData = users.items.map(item => ({ name: item.metadata.name, creation_timestamp: item.metadata.creationTimestamp }));
-
-	let adminUser = usersData.pop();
-	usersData.unshift(adminUser);
-
-	const system = {
-		name: SYSTEM,
-	}
-	const list = [...usersData, system]
-
-	const result = list.map(item => {
-		if (item.name === SYSTEM) {
-			const data = originalData.items.filter(namespace => !usersData.some(str => endsWith(namespace.metadata.name, str.name)))
-			return {
-				title: item.name,
-				data: data,
-			}
-		} else {
-			const data = originalData.items.filter(namespace => endsWith(namespace.metadata.name, item.name))
-			return {
-				title: item.name,
-				data: data,
+	for (const namespace of items) {
+		const name = namespace.metadata.name;
+		if (endsWith(name, 'shared')) {
+			shared.push(namespace);
+			continue;
+		}
+		let matchedUser = false;
+		for (const u of usersData) {
+			if (endsWith(name, u.name)) {
+				userBuckets.get(u.name).push(namespace);
+				matchedUser = true;
 			}
 		}
+		if (!matchedUser) {
+			system.push(namespace);
+		}
+	}
 
-	});
-	const res = result.filter(item => item.data.length > 0)
-	ctx.body = res;
+	return { userBuckets, shared, system };
 }
+
+const namespaceGroup = async (ctx) => {
+	const namespaces = await getNamespaces(ctx);
+	const users = await getUsers(ctx);
+
+	const originalData = namespaceFormat(ctx.req, namespaces);
+
+	const SYSTEM = 'System';
+	const SHARED = 'Shared';
+	const usersData = users.items.map((item) => ({
+		name: item.metadata.name,
+		creation_timestamp: item.metadata.creationTimestamp
+	}));
+
+	let adminUser;
+	let otherUsers;
+	if (usersData.length > 0) {
+		otherUsers = usersData.slice(0, -1);
+		adminUser = usersData[usersData.length - 1];
+	} else {
+		otherUsers = [];
+	}
+	const usersOrderedForBuckets = adminUser
+		? [adminUser, ...otherUsers]
+		: [];
+
+	const { userBuckets, shared, system } = buildNamespaceGroupBuckets(
+		originalData.items,
+		usersOrderedForBuckets
+	);
+
+	const result = [
+		...(adminUser
+			? [
+				{
+					title: adminUser.name,
+					data: userBuckets.get(adminUser.name)
+				}
+			]
+			: []),
+		...otherUsers.map((u) => ({
+			title: u.name,
+			data: userBuckets.get(u.name)
+		})),
+		{ title: SHARED, data: shared },
+		{ title: SYSTEM, data: system }
+	];
+
+	ctx.body = result.filter((item) => item.data.length > 0);
+};
 
 const cacheUser = async (ctx, next) => {
 	const target = checkUrl(ctx.path);
