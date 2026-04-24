@@ -18,6 +18,7 @@
 
 const HttpProxy = require('http-proxy');
 const pathToRegexp = require('path-to-regexp');
+const { PassThrough } = require('stream');
 const isArray = require('lodash/isArray');
 const get = require('lodash/get');
 const isFunction = require('lodash/isFunction');
@@ -52,7 +53,16 @@ module.exports = (context, options) => (ctx, next) => {
 			resolve();
 		});
 
-		if (
+		if (ctx.req.rawBody) {
+			const body = ctx.req.rawBody;
+			if (Buffer.isBuffer(body)) {
+				const pt = new PassThrough();
+				pt.end(body);
+				httpProxyOpts.buffer = pt;
+			} else {
+				httpProxyOpts.buffer = isArray(body) ? streamify(body) : body;
+			}
+		} else if (
 			get(ctx, "req.headers['content-type']", '').includes(
 				'multipart/form-data'
 			)

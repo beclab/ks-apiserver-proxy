@@ -21,7 +21,12 @@ const zlib = require('zlib');
 const querystring = require('querystring');
 
 const { getServerConfig } = require('./libs/utils');
-const { checkUrl, canModify, isAdmin } = require('./cache/user');
+const {
+	checkUrl,
+	canModify,
+	isAdmin,
+	mergeMonitoringNamespaceRequestParams
+} = require('./cache/user');
 
 const { server: serverConfig } = getServerConfig();
 
@@ -40,12 +45,14 @@ const k8sResourceProxy = {
 					options.selfHandleResponse = true;
 				}
 				if (!isAdmin(req) && target.searchParamsFn) {
+					const urlQuery = querystring.parse(parsedUrl.search.slice(1));
+					const filterInput = mergeMonitoringNamespaceRequestParams(
+						parsedUrl.search.slice(1),
+						req.kapisMonitoringJsonBody
+					);
 					const newParams = {
-						...querystring.parse(parsedUrl.search.slice(1)),
-						...target.searchParamsFn(
-							req,
-							querystring.parse(parsedUrl.search.slice(1))
-						)
+						...urlQuery,
+						...target.searchParamsFn(req, filterInput)
 					};
 					const modifiedUrl = `${pathname}?${querystring.stringify(newParams)}`;
 					proxyReq.path = modifiedUrl;

@@ -1,5 +1,6 @@
 const { isUndefined } = require('lodash');
 const get = require('lodash/get');
+const querystring = require('querystring');
 const { getSystemNamespaces } = require('../services/session');
 const { ADMIN_ROLE } = require('./user.config');
 
@@ -15,6 +16,27 @@ const resources_filter = (ctx, query) => {
 			: `.*${user.username}.*`
 	};
 };
+
+function mergeMonitoringNamespaceRequestParams(searchSlice, jsonBody) {
+	const q = querystring.parse(searchSlice || '');
+	const body =
+		jsonBody && typeof jsonBody === 'object' && !Array.isArray(jsonBody)
+			? jsonBody
+			: {};
+	return { ...q, ...body };
+}
+
+function patchMonitoringNamespacesPostBody(ctx, jsonBody, searchSlice) {
+	const body =
+		jsonBody && typeof jsonBody === 'object' && !Array.isArray(jsonBody)
+			? jsonBody
+			: {};
+	if (!getUserInfo(ctx) || isAdmin(ctx)) {
+		return body;
+	}
+	const merged = mergeMonitoringNamespaceRequestParams(searchSlice, body);
+	return { ...body, ...resources_filter(ctx, merged) };
+}
 
 const pod_filter = (ctx, query) => {
 	return {
@@ -163,5 +185,7 @@ module.exports = {
 	checkUrl,
 	isAdmin,
 	canModify,
-	namespaceFormat
+	namespaceFormat,
+	mergeMonitoringNamespaceRequestParams,
+	patchMonitoringNamespacesPostBody
 };

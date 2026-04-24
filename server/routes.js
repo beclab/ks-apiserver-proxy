@@ -1,6 +1,7 @@
 const Router = require('koa-router');
 
 const proxy = require('./middlewares/proxy');
+const kapisMonitoringNamespacesPost = require('./middlewares/kapisMonitoringNamespacesPost');
 
 const { k8sResourceProxy } = require('./proxy');
 
@@ -21,6 +22,7 @@ router
 	.get('/capi/system/ifs', systemIFS)
 
 	.all('/(k)?api(s)?/(.*)', cacheUser)
+	.all('/(k)?api(s)?/(.*)', kapisMonitoringNamespacesPost)
 	.use(proxy('/(k)?api(s)?/(.*)', k8sResourceProxy))
 	.all('/(c)?api(s)?/(.*)', cacheUser)
 	.get('/capi/monitoring.kubesphere.io/v1alpha3/:type', monitoringMetric)
