@@ -24,6 +24,7 @@ const jwtDecode = require('jwt-decode');
 const { ownerToGlobalRole } = require('../cache/user.config');
 
 const { send_gateway_request, send_gateway_request_system } = require('../libs/request');
+const { getAuthToken } = require('../libs/auth');
 
 const {
 	isAppsRoute,
@@ -236,7 +237,7 @@ const getUserDetail = async (token, clusterRole, isMulticluster) => {
 
 
 const getKSConfig = async (ctx) => {
-	const token = ctx.cookies.get('auth_token');
+	const token = getAuthToken(ctx);
 	let resp = {};
 	try {
 		const [config, version] = await Promise.all([
@@ -263,7 +264,7 @@ const getKSConfig = async (ctx) => {
 };
 
 const getK8sRuntime = async (ctx) => {
-	const token = ctx.cookies.get('auth_token');
+	const token = getAuthToken(ctx);
 	let resp = 'docker';
 	if (!token) {
 		return resp;
@@ -286,7 +287,7 @@ const getK8sRuntime = async (ctx) => {
 };
 
 const getClusterRole = async (ctx) => {
-	const token = ctx.cookies.get('auth_token');
+	const token = getAuthToken(ctx);
 	let role = 'host';
 	if (!token) {
 		return role;
@@ -313,7 +314,7 @@ const getClusterRole = async (ctx) => {
 };
 
 const getMyApps = async (ctx) => {
-	const token = ctx.cookies.get('auth_token');
+	const token = getAuthToken(ctx);
 	const data = await send_gateway_request({
 		method: 'GET',
 		url: '/bfl/app_process/v1alpha1/myapps',
@@ -340,7 +341,7 @@ const getSystemIFS = async (ctx) => {
 
 
 const getClusterMetric = async (ctx, params) => {
-	const token = ctx.cookies.get('auth_token');
+	const token = getAuthToken(ctx);
 	return await send_gateway_request({
 		method: 'GET',
 		url: '/kapis/monitoring.kubesphere.io/v1alpha3/cluster',
@@ -355,7 +356,7 @@ const getAllMetric = async (ctx, params) => {
 };
 
 const getUserMetric = async (ctx, params) => {
-	const token = ctx.cookies.get('auth_token');
+	const token = getAuthToken(ctx);
 	const user = ctx.params.type;
 
 	const data = await send_gateway_request({
@@ -371,7 +372,7 @@ const getUserMetric = async (ctx, params) => {
 
 // TODO: need to get the data from kubesphere
 const getGitOpsEngine = async (ctx) => {
-	const token = ctx.cookies.get('auth_token');
+	const token = getAuthToken(ctx);
 	if (!token) {
 		return [];
 	}
@@ -379,7 +380,7 @@ const getGitOpsEngine = async (ctx) => {
 };
 
 const getNamespaces = async (ctx) => {
-	const token = ctx.cookies.get('auth_token');
+	const token = getAuthToken(ctx);
 
 	const resp = await send_gateway_request({
 		method: 'GET',
@@ -395,7 +396,7 @@ const getNamespaces = async (ctx) => {
 }
 
 const getUsers = async (ctx, clusterRole, isMulticluster) => {
-	const token = ctx.cookies.get('auth_token');
+	const token = getAuthToken(ctx);
 
 	const resp = await send_gateway_request({
 		method: 'GET',
@@ -406,7 +407,7 @@ const getUsers = async (ctx, clusterRole, isMulticluster) => {
 };
 
 const getCurrentUser = async (ctx, clusterRole, isMulticluster = false) => {
-	const token = ctx.cookies.get('auth_token');
+	const token = getAuthToken(ctx);
 
 	if (!token) {
 		if (isAppsRoute(ctx.path)) {

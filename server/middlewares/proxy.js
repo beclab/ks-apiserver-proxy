@@ -24,6 +24,8 @@ const get = require('lodash/get');
 const isFunction = require('lodash/isFunction');
 const streamify = require('stream-array');
 
+const { getAuthToken } = require('../libs/auth');
+
 module.exports = (context, options) => (ctx, next) => {
 	let eventRegistered = false;
 
@@ -34,7 +36,7 @@ module.exports = (context, options) => (ctx, next) => {
 
 	const { events, ...httpProxyOpts } = options;
 
-	ctx.req.token = ctx.cookies.get('auth_token');
+	ctx.req.token = getAuthToken(ctx);
 
 	return new Promise((resolve, reject) => {
 		if (events && typeof events === 'object' && !eventRegistered) {
