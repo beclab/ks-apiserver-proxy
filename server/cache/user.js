@@ -8,13 +8,13 @@ const cache = {};
 
 const systemNamespaces = getSystemNamespaces()
 
-const resources_filter = (ctx, query) => {
-	const user = getUserInfo(ctx);
-	return {
-		resources_filter: query.name
-			? `.*(?:${user.username}).*?(?:${query.name}).*|.*(?:${query.name}).*?(?:${user.username}).*`
-			: `.*${user.username}.*`
-	};
+const isAllowedMonitoringNamespace = (namespace, user) => {
+	if (!namespace || !user) {
+		return false;
+	}
+	const owned = namespace.split('-').includes(user.username);
+	const shared = namespace.endsWith('-shared');
+	return owned || shared;
 };
 
 function mergeMonitoringNamespaceRequestParams(searchSlice, jsonBody) {
@@ -26,16 +26,33 @@ function mergeMonitoringNamespaceRequestParams(searchSlice, jsonBody) {
 	return { ...q, ...body };
 }
 
-function patchMonitoringNamespacesPostBody(ctx, jsonBody, searchSlice) {
-	const body =
-		jsonBody && typeof jsonBody === 'object' && !Array.isArray(jsonBody)
-			? jsonBody
-			: {};
-	if (!getUserInfo(ctx) || isAdmin(ctx)) {
-		return body;
+function patchMonitoringNamespacesPostBody(ctx, jsonBody) {
+	return jsonBody && typeof jsonBody === 'object' && !Array.isArray(jsonBody)
+		? jsonBody
+		: {};
+}
+
+function monitoringNamespacesFormat(ctx, data) {
+	const user = getUserInfo(ctx);
+	if (!user || !Array.isArray(data)) {
+		return data;
 	}
-	const merged = mergeMonitoringNamespaceRequestParams(searchSlice, body);
-	return { ...body, ...resources_filter(ctx, merged) };
+	return data.map((metric) => {
+		const result = get(metric, 'data.result');
+		if (!Array.isArray(result)) {
+			return metric;
+		}
+		const filtered = result.filter((item) =>
+			isAllowedMonitoringNamespace(get(item, 'metric.namespace'), user)
+		);
+		return {
+			...metric,
+			data: {
+				...metric.data,
+				result: filtered
+			}
+		};
+	});
 }
 
 const pod_filter = (ctx, query) => {
@@ -58,8 +75,8 @@ const namespaceList = [
 	},
 	{
 		pathname: '/kapis/monitoring.kubesphere.io/v1alpha3/namespaces',
-		modify: false,
-		searchParamsFn: resources_filter
+		modify: true,
+		resFormat: monitoringNamespacesFormat
 	},
 	{
 		pathname: '/kapis/resources.kubesphere.io/v1alpha3/networkpolicies',
