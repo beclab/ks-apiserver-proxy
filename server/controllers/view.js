@@ -35,6 +35,7 @@ const {
 	getUserInfo,
 	checkUrl,
 	isAdmin,
+	isShared,
 	namespaceFormat
 } = require('../cache/user.js');
 
@@ -222,7 +223,7 @@ function buildNamespaceGroupBuckets(items, usersData) {
 
 	for (const namespace of items) {
 		const name = namespace.metadata.name;
-		if (endsWith(name, 'shared')) {
+		if (isShared(namespace)) {
 			shared.push(namespace);
 			continue;
 		}
