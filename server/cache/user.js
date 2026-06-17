@@ -8,6 +8,13 @@ const cache = {};
 
 const systemNamespaces = getSystemNamespaces()
 
+const SHARED_LABELS = ['bytetrade.io/ns-shared', 'app.bytetrade.io/app-shared'];
+
+const isShared = (item) => {
+	const labels = get(item, 'metadata.labels', {});
+	return SHARED_LABELS.some((label) => labels[label] === 'true');
+};
+
 const isAllowedMonitoringNamespace = (namespace, user) => {
 	if (!namespace || !user) {
 		return false;
@@ -111,9 +118,10 @@ function podListFormat(ctx, data) {
 		const systemTarget = systemNamespaces.find(
 			(system_namespace) => namespace === system_namespace
 		);
+		const sharedTarget = isShared(item);
 		return user.globalrole === ADMIN_ROLE
-			? userTarget || systemTarget
-			: userTarget;
+			? userTarget || systemTarget || sharedTarget
+			: userTarget || sharedTarget;
 	});
 	return {
 		...data,
@@ -134,9 +142,10 @@ function namespaceFormat(ctx, data) {
 		const systemTarget = systemNamespaces.find(
 			(system_namespace) => namespace === system_namespace
 		);
+		const sharedTarget = isShared(item);
 		return user.globalrole === ADMIN_ROLE
 			? true
-			: userTarget;
+			: userTarget || sharedTarget;
 	});
 	return {
 		...data,
@@ -202,6 +211,7 @@ module.exports = {
 	checkUrl,
 	isAdmin,
 	canModify,
+	isShared,
 	namespaceFormat,
 	mergeMonitoringNamespaceRequestParams,
 	patchMonitoringNamespacesPostBody
