@@ -111,63 +111,66 @@ function modifyResponseBody(req, data, pathname) {
 }
 
 function k8sResourceproxyRes(proxyRes, req, res) {
-	console.log('k8sResourceproxyRes', req.headers['x-bfl-user']);
-	const contentEncoding = proxyRes.headers['content-encoding'];
-	const headers = proxyRes.headers;
-	let { pathname } = new URL(req.url, 'http://locathost:3000');
+	const { pathname } = new URL(req.url, 'http://locathost:3000');
 
-	if (canModify(req, pathname)) {
-		if (contentEncoding === 'gzip') {
-			const gunzip = zlib.createGunzip();
-			let rawData = '';
-			gunzip.on('data', (chunk) => {
-				rawData += chunk;
-			});
-			res.writeHead(proxyRes.statusCode, headers);
-
-			gunzip.on('end', () => {
-				try {
-					const originalData = modifyResponseBody(
-						req,
-						JSON.parse(rawData),
-						pathname
-					);
-					const modifiedData = JSON.stringify(originalData);
-					const compressedData = zlib.gzipSync(modifiedData);
-					res.write(compressedData);
-					res.end();
-				} catch (error) {
-					console.error(error);
-					// ctx.throw(500, 'Internal Server Error');
-				}
-			});
-
-			proxyRes.pipe(gunzip);
-		} else {
-			let rawData = '';
-			proxyRes.on('data', (chunk) => {
-				rawData += chunk;
-			});
-			res.writeHead(proxyRes.statusCode, proxyRes.headers);
-			proxyRes.on('end', () => {
-				try {
-					const originalData = modifyResponseBody(
-						req,
-						JSON.parse(rawData),
-						pathname
-					);
-					const modifiedData = JSON.stringify(originalData);
-					res.write(modifiedData);
-					res.end();
-				} catch (error) {
-					console.error(error);
-					// ctx.throw(500, 'Internal Server Error');
-				}
-			});
-
-			// proxyRes.pipe(res);
-		}
+	// Only non-admin responses are rewritten; admin responses are piped through
+	// untouched by the proxy. Returning here leaves the default passthrough.
+	if (!canModify(req, pathname)) {
+		return;
 	}
+
+	const isGzip = proxyRes.headers['content-encoding'] === 'gzip';
+	const chunks = [];
+
+	let finished = false;
+	const finish = (rawBuffer) => {
+		if (finished) {
+			return;
+		}
+		finished = true;
+
+		// Fallback: stream the original bytes back verbatim. Used whenever decoding
+		// or rewriting fails so the request never hangs and the client still gets
+		// the upstream payload. content-length is corrected to the real size.
+		const passthrough = () => {
+			const headers = { ...proxyRes.headers };
+			if (rawBuffer) {
+				headers['content-length'] = String(rawBuffer.length);
+			}
+			res.writeHead(proxyRes.statusCode, headers);
+			res.end(rawBuffer || undefined);
+		};
+
+		if (!rawBuffer) {
+			passthrough();
+			return;
+		}
+
+		try {
+			const decoded = isGzip ? zlib.gunzipSync(rawBuffer) : rawBuffer;
+			const modified = modifyResponseBody(
+				req,
+				JSON.parse(decoded.toString('utf8')),
+				pathname
+			);
+			let body = Buffer.from(JSON.stringify(modified), 'utf8');
+			if (isGzip) {
+				body = zlib.gzipSync(body);
+			}
+			const headers = { ...proxyRes.headers };
+			headers['content-length'] = String(body.length);
+			delete headers['transfer-encoding'];
+			res.writeHead(proxyRes.statusCode, headers);
+			res.end(body);
+		} catch (error) {
+			console.error('k8sResourceproxyRes rewrite failed, passing through:', error);
+			passthrough();
+		}
+	};
+
+	proxyRes.on('data', (chunk) => chunks.push(chunk));
+	proxyRes.on('end', () => finish(Buffer.concat(chunks)));
+	proxyRes.on('error', () => finish(chunks.length ? Buffer.concat(chunks) : null));
 }
 
 module.exports = {
