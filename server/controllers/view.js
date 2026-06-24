@@ -33,7 +33,6 @@ const {
 const {
 	setUserInfo,
 	getUserInfo,
-	checkUrl,
 	isAdmin,
 	isShared,
 	namespaceFormat
@@ -46,7 +45,8 @@ const {
 	isValidReferer,
 	safeBase64
 } = require('../libs/utils');
-const { find, cloneDeep } = require('lodash');
+const { find, cloneDeep, get } = require('lodash');
+const { collapseSplitSeries } = require('../libs/monitoring');
 
 const { client: clientConfig } = getServerConfig();
 
@@ -90,6 +90,62 @@ const monitoringDataFormat = (data, splitStr) => {
 	}));
 };
 
+const toTimestampValueMap = (values) => {
+	const map = {};
+	if (Array.isArray(values)) {
+		values.forEach((point) => {
+			if (Array.isArray(point) && point.length >= 2) {
+				map[point[0]] = Number(point[1]);
+			}
+		});
+	}
+	return map;
+};
+
+// Compute usage/total utilisation safely. The total series (denominator) may
+// be missing data points or have a different length than the usage series
+// (e.g. a user's quota vs. usage), so we align by timestamp and fall back to 0
+// when the matching total is absent or zero instead of indexing blindly.
+const calcUtilisation = (usageValues, totalTarget, isValues) => {
+	if (isValues) {
+		const totalMap = toTimestampValueMap(totalTarget);
+		return (Array.isArray(usageValues) ? usageValues : []).map((point) => {
+			const total = totalMap[point[0]];
+			const ratio = total ? Number(point[1]) / total : 0;
+			return [point[0], ratio];
+		});
+	}
+
+	const total = Array.isArray(totalTarget) ? Number(totalTarget[1]) : 0;
+	const ratio =
+		Array.isArray(usageValues) && total ? Number(usageValues[1]) / total : 0;
+	return [usageValues ? usageValues[0] : undefined, ratio];
+};
+
+// Build a `*_utilisation` metric from an existing usage metric and a total
+// divisor. Returns null when the usage metric (or its data) is missing so the
+// caller can simply skip it instead of crashing on an absent series.
+const buildUtilisation = (
+	list,
+	usageMetricName,
+	utilisationName,
+	totalTarget,
+	valueName,
+	isValues
+) => {
+	const usageMetric = cloneDeep(find(list, { metric_name: usageMetricName }));
+	const usageValue = get(usageMetric, ['data', 'result', 0, valueName]);
+	if (usageValue === undefined) {
+		return null;
+	}
+	usageMetric.data.result[0][valueName] = calcUtilisation(
+		usageValue,
+		totalTarget,
+		isValues
+	);
+	return { ...usageMetric, metric_name: utilisationName };
+};
+
 const monitoringMetric = async (ctx) => {
 	const queryParams = ctx.query;
 	let params = {
@@ -109,20 +165,13 @@ const monitoringMetric = async (ctx) => {
 
 	let cluster_cpu_total_target = {};
 	let cluster_memory_total_target = {};
-	const user = getUserInfo(ctx);
 	const checkAdmin = isAdmin(ctx);
-	console.log('checkAdmin', checkAdmin);
 	if (type === 'cluster') {
 		params.metrics_filter =
 			'cluster_cpu_usage|cluster_cpu_total|cluster_cpu_utilisation|cluster_memory_usage_wo_cache|cluster_memory_total|cluster_memory_utilisation|cluster_disk_size_usage|cluster_disk_size_capacity|cluster_disk_size_utilisation|cluster_pod_running_count|cluster_pod_quota$';
 		data = await getAllMetric(ctx, params);
 		list = monitoringDataFormat(data, clusterSplitStr);
 	} else {
-		const clusterParams = {
-			...params,
-			metrics_filter:
-				'cluster_cpu_total|cluster_memory_total|cluster_disk_size_capacity$'
-		};
 		params.metrics_filter =
 			'user_cpu_usage|user_cpu_total|user_cpu_utilisation|user_memory_usage_wo_cache|user_memory_total|user_memory_utilisation|user_disk_size_usage|user_disk_size_capacity|user_disk_size_utilisation|user_pod_running_count|user_pod_count$';
 
@@ -131,81 +180,124 @@ const monitoringMetric = async (ctx) => {
 		if (!isValues) {
 			valueName = 'value';
 		}
-		const [clusterData, userData] = await Promise.all([
-			getClusterMetric(ctx, clusterParams),
-			getUserMetric(ctx, params)
-		]);
 
-		const clusterDataNew = monitoringDataFormat(clusterData, clusterSplitStr);
-		list = monitoringDataFormat(userData, userSplitStr).map((item) => {
-			let target = {};
-			if (item.metric_name === 'cluster_cpu_total') {
-				if (checkAdmin) {
+		if (checkAdmin) {
+			// Admin path: original logic, untouched. Cluster-level totals come from
+			// `sum(...)` (a single, complete series), so positional division is safe.
+			const clusterParams = {
+				...params,
+				metrics_filter:
+					'cluster_cpu_total|cluster_memory_total|cluster_disk_size_capacity$'
+			};
+			const [clusterData, userData] = await Promise.all([
+				getClusterMetric(ctx, clusterParams),
+				getUserMetric(ctx, params)
+			]);
+
+			const clusterDataNew = monitoringDataFormat(clusterData, clusterSplitStr);
+			list = monitoringDataFormat(userData, userSplitStr).map((item) => {
+				let target = {};
+				if (item.metric_name === 'cluster_cpu_total') {
 					target = clusterDataNew.find(
 						(child) => child.metric_name === 'cluster_cpu_total'
 					);
 					item.data.result[0][valueName] = target.data.result[0][valueName];
-				}
-				cluster_cpu_total_target = item.data.result[0][valueName];
-			} else if (item.metric_name === 'cluster_memory_total') {
-				if (checkAdmin) {
+					cluster_cpu_total_target = item.data.result[0][valueName];
+				} else if (item.metric_name === 'cluster_memory_total') {
 					target = clusterDataNew.find(
 						(child) => child.metric_name === 'cluster_memory_total'
 					);
 					item.data.result[0][valueName] = target.data.result[0][valueName];
+					cluster_memory_total_target = item.data.result[0][valueName];
 				}
+				if (item.metric_name === 'cluster_pod_count') {
+					item.metric_name = 'cluster_pod_quota';
+				}
+				return item;
+			});
 
-				cluster_memory_total_target = item.data.result[0][valueName];
-			}
-			if (item.metric_name === 'cluster_pod_count') {
-				item.metric_name = 'cluster_pod_quota';
-			}
-			return item;
-		});
+			const cluster_cpu_utilisation = cloneDeep(
+				find(list, { metric_name: 'cluster_cpu_usage' })
+			);
+			const cluster_cpu_utilisation_value =
+				cluster_cpu_utilisation.data.result[0][valueName];
+			cluster_cpu_utilisation.data.result[0][valueName] = isValues
+				? cluster_cpu_utilisation_value.map((item, index) => [
+					item[0],
+					item[1] / cluster_cpu_total_target[index][1]
+				])
+				: [
+					cluster_cpu_utilisation_value[0],
+					cluster_cpu_utilisation_value[1] / cluster_cpu_total_target[1]
+				];
 
-		const cluster_cpu_utilisation = cloneDeep(
-			find(list, {
-				metric_name: 'cluster_cpu_usage'
-			})
-		);
+			const cluster_memory_utilisation = cloneDeep(
+				find(list, { metric_name: 'cluster_memory_usage_wo_cache' })
+			);
+			const cluster_memory_utilisation_value =
+				cluster_memory_utilisation.data.result[0][valueName];
+			cluster_memory_utilisation.data.result[0][valueName] = isValues
+				? cluster_memory_utilisation_value.map((item, index) => [
+					item[0],
+					item[1] / cluster_memory_total_target[index][1]
+				])
+				: [
+					cluster_memory_utilisation_value[0],
+					cluster_memory_utilisation_value[1] / cluster_memory_total_target[1]
+				];
 
-		const cluster_cpu_utilisation_value =
-			cluster_cpu_utilisation.data.result[0][valueName];
+			list = list.concat([
+				{ ...cluster_cpu_utilisation, metric_name: 'cluster_cpu_utilisation' },
+				{
+					...cluster_memory_utilisation,
+					metric_name: 'cluster_memory_utilisation'
+				}
+			]);
+		} else {
+			// Sub-account path: no permission for cluster metrics, and the user's own
+			// quota series can be split across kube-state-metrics instances. Fetch only
+			// the user metric, collapse instance-split series, then compute utilisation
+			// by timestamp with guards so a partial/missing series never crashes.
+			const userData = collapseSplitSeries(await getUserMetric(ctx, params));
 
-		cluster_cpu_utilisation.data.result[0][valueName] = isValues
-			? cluster_cpu_utilisation_value.map((item, index) => [
-				item[0],
-				item[1] / cluster_cpu_total_target[index][1]
-			])
-			: [
-				cluster_cpu_utilisation_value[0],
-				cluster_cpu_utilisation_value[1] / cluster_cpu_total_target[1]
-			];
+			list = monitoringDataFormat(userData, userSplitStr).map((item) => {
+				if (item.metric_name === 'cluster_cpu_total') {
+					cluster_cpu_total_target = get(item, ['data', 'result', 0, valueName]);
+				} else if (item.metric_name === 'cluster_memory_total') {
+					cluster_memory_total_target = get(item, [
+						'data',
+						'result',
+						0,
+						valueName
+					]);
+				}
+				if (item.metric_name === 'cluster_pod_count') {
+					item.metric_name = 'cluster_pod_quota';
+				}
+				return item;
+			});
 
-		const cluster_memory_utilisation = cloneDeep(
-			find(list, {
-				metric_name: 'cluster_memory_usage_wo_cache'
-			})
-		);
-		const cluster_memory_utilisation_value =
-			cluster_memory_utilisation.data.result[0][valueName];
-		cluster_memory_utilisation.data.result[0][valueName] = isValues
-			? cluster_memory_utilisation_value.map((item, index) => [
-				item[0],
-				item[1] / cluster_memory_total_target[index][1]
-			])
-			: [
-				cluster_memory_utilisation_value[0],
-				cluster_memory_utilisation_value[1] / cluster_memory_total_target[1]
-			];
+			const utilisations = [
+				buildUtilisation(
+					list,
+					'cluster_cpu_usage',
+					'cluster_cpu_utilisation',
+					cluster_cpu_total_target,
+					valueName,
+					isValues
+				),
+				buildUtilisation(
+					list,
+					'cluster_memory_usage_wo_cache',
+					'cluster_memory_utilisation',
+					cluster_memory_total_target,
+					valueName,
+					isValues
+				)
+			].filter(Boolean);
 
-		list = list.concat([
-			{ ...cluster_cpu_utilisation, metric_name: 'cluster_cpu_utilisation' },
-			{
-				...cluster_memory_utilisation,
-				metric_name: 'cluster_memory_utilisation'
-			}
-		]);
+			list = list.concat(utilisations);
+		}
 	}
 
 	ctx.body = { results: list };
@@ -299,9 +391,7 @@ const namespaceGroup = async (ctx) => {
 };
 
 const cacheUser = async (ctx, next) => {
-	const target = checkUrl(ctx.path);
 	const user = getUserInfo(ctx);
-	console.log('header', ctx.headers['x-bfl-user']);
 	if (!user) {
 		const clusterRole = await getClusterRole(ctx);
 		const [user] = await Promise.all([

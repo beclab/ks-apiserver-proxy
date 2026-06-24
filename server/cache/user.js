@@ -3,6 +3,7 @@ const get = require('lodash/get');
 const querystring = require('querystring');
 const { getSystemNamespaces } = require('../services/session');
 const { ADMIN_ROLE } = require('./user.config');
+const { collapseSplitSeries } = require('../libs/monitoring');
 
 const cache = {};
 
@@ -109,7 +110,6 @@ const namespaceList = [
 
 function podListFormat(ctx, data) {
 	const user = getUserInfo(ctx);
-	console.log('user', user);
 	const newData = data.items.filter((item) => {
 		const namespace = get(item, 'metadata.name');
 		const userTarget = namespace
@@ -133,7 +133,6 @@ function podListFormat(ctx, data) {
 
 function namespaceFormat(ctx, data) {
 	const user = getUserInfo(ctx);
-	console.log('user', user);
 	const newData = data.items.filter((item) => {
 		const namespace = get(item, 'metadata.name');
 		const userTarget = namespace
@@ -175,8 +174,27 @@ function namespaceListFormat(ctx, data) {
 	};
 }
 
+// The raw `/kapis/monitoring.kubesphere.io/v1alpha3/users/{user}` endpoint is
+// used directly by the KubeSphere dashboard and proxied through untouched.
+// Quota metrics from kube-state-metrics carry an `instance` label, so a KSM
+// replica restart/reschedule splits a single logical series into several result
+// entries. The dashboard can't handle that, so non-admin responses on this path
+// are run through the shared collapsing helper (see libs/monitoring).
+const USER_MONITORING_RE = /^\/kapis\/monitoring\.kubesphere\.io\/v1alpha3\/users\/[^/]+$/;
+
 function checkUrl(pathname) {
-	return namespaceList.find((item) => item.pathname === pathname);
+	const exactMatch = namespaceList.find((item) => item.pathname === pathname);
+	if (exactMatch) {
+		return exactMatch;
+	}
+	if (USER_MONITORING_RE.test(pathname)) {
+		return {
+			pathname,
+			modify: true,
+			resFormat: (ctx, data) => collapseSplitSeries(data)
+		};
+	}
+	return undefined;
 }
 
 const getUserInfo = (ctx) => {
