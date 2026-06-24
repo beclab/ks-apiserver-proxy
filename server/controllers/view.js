@@ -272,6 +272,8 @@ const namespaceGroup = async (ctx) => {
 		usersOrderedForBuckets
 	);
 
+	const checkAdmin = isAdmin(ctx);
+
 	const result = [
 		...(adminUser
 			? [
@@ -285,8 +287,12 @@ const namespaceGroup = async (ctx) => {
 			title: u.name,
 			data: userBuckets.get(u.name)
 		})),
-		{ title: SHARED, data: shared },
-		{ title: SYSTEM, data: system }
+		...(checkAdmin
+			? [
+				{ title: SHARED, data: shared },
+				{ title: SYSTEM, data: system }
+			]
+			: [])
 	];
 
 	ctx.body = result.filter((item) => item.data.length > 0);
