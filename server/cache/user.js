@@ -10,10 +10,27 @@ const cache = {};
 const systemNamespaces = getSystemNamespaces()
 
 const SHARED_LABELS = ['bytetrade.io/ns-shared', 'app.bytetrade.io/app-shared'];
+// Shared apps always live in a deterministic `<app>-shared` namespace
+// (v3 `options.shared: true` -> `<app>-shared`; v2 shared sub-charts ->
+// `<chart>-shared`). This suffix is the single source of truth in
+// app-service.
+const SHARED_NS_SUFFIX = '-shared';
 
+// isShared decides whether a namespace object belongs to a shared app.
+//
+// Label check alone is not enough: the shared labels are only stamped once
+// Helm runs `AddApplicationLabelsToDeployment` during the Installing phase,
+// so a freshly-created `<app>-shared` namespace (early install window, or a
+// v2 shared sub-chart before its labels land) would be missed. We therefore
+// fall back to the deterministic namespace-name suffix, which is present from
+// the moment the namespace exists.
 const isShared = (item) => {
 	const labels = get(item, 'metadata.labels', {});
-	return SHARED_LABELS.some((label) => labels[label] === 'true');
+	if (SHARED_LABELS.some((label) => labels[label] === 'true')) {
+		return true;
+	}
+	const name = get(item, 'metadata.name');
+	return typeof name === 'string' && name.endsWith(SHARED_NS_SUFFIX);
 };
 
 const isAllowedMonitoringNamespace = (namespace, user) => {
