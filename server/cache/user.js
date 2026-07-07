@@ -33,11 +33,25 @@ const isShared = (item) => {
 	return typeof name === 'string' && name.endsWith(SHARED_NS_SUFFIX);
 };
 
+// isOwnedNamespace decides whether `namespace` belongs to `username`.
+//
+// Ownership is the LAST '-'-segment of the namespace (`<app>-<owner>`,
+// `user-space-<owner>`, `user-system-<owner>`), so we match the `-<owner>`
+// suffix rather than any segment. Matching any segment (the previous
+// `split('-').includes(username)`) let another account's namespace match a
+// sub-account when an app was literally named like the user
+// (e.g. `<username>-<otherOwner>`), leaking it across accounts. The leading
+// `-` also prevents substring false-matches (e.g. `x<username>`).
+const isOwnedNamespace = (namespace, username) =>
+	typeof namespace === 'string' &&
+	!!username &&
+	namespace.endsWith(`-${username}`);
+
 const isAllowedMonitoringNamespace = (namespace, user) => {
 	if (!namespace || !user) {
 		return false;
 	}
-	const owned = namespace.split('-').includes(user.username);
+	const owned = isOwnedNamespace(namespace, user.username);
 	const shared = namespace.endsWith('-shared');
 	return owned || shared;
 };
@@ -129,9 +143,7 @@ function podListFormat(ctx, data) {
 	const user = getUserInfo(ctx);
 	const newData = data.items.filter((item) => {
 		const namespace = get(item, 'metadata.name');
-		const userTarget = namespace
-			.split('-')
-			.find((item) => item === user.username);
+		const userTarget = isOwnedNamespace(namespace, user.username);
 		const systemTarget = systemNamespaces.find(
 			(system_namespace) => namespace === system_namespace
 		);
@@ -156,15 +168,11 @@ function namespaceFormat(ctx, data) {
 	const user = getUserInfo(ctx);
 	const newData = data.items.filter((item) => {
 		const namespace = get(item, 'metadata.name');
-		// Ownership is the LAST '-'-segment of the namespace
-		// (`<app>-<owner>`, `user-space-<owner>`, `user-system-<owner>`), so
-		// match the owner suffix instead of any segment. Matching any segment
-		// would leak another account's namespace to a sub-account when an app
-		// is literally named like the sub-account (e.g. `<username>-<other>`).
-		// Sub-accounts (non-admin) therefore only see their own namespaces;
-		// system / shared / other-account namespaces are excluded here (shared
-		// stays visible via the monitoring path). Admins see everything.
-		const owned = namespace.endsWith(`-${user.username}`);
+		// Sub-accounts (non-admin) only see their own namespaces; system /
+		// shared / other-account namespaces are excluded here (shared stays
+		// visible via the monitoring path). Admins see everything. Ownership is
+		// the `-<owner>` suffix — see isOwnedNamespace.
+		const owned = isOwnedNamespace(namespace, user.username);
 		return user.globalrole === ADMIN_ROLE
 			? true
 			: owned;
@@ -181,7 +189,7 @@ function namespaceListFormat(ctx, data) {
 	const user = getUserInfo(ctx);
 	const newData = data.items.filter((item) => {
 		const namespace = get(item, 'metadata.namespace');
-		const userTarget = namespace.split('-').includes(user.username);
+		const userTarget = isOwnedNamespace(namespace, user.username);
 		const systemTarget = systemNamespaces.find(
 			(system_namespace) => namespace === system_namespace
 		);
