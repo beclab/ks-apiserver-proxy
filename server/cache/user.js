@@ -136,9 +136,13 @@ function podListFormat(ctx, data) {
 			(system_namespace) => namespace === system_namespace
 		);
 		const sharedTarget = isShared(item);
+		// Sub-accounts (non-admin) must NOT see shared namespaces in the
+		// namespace list — they can only see their own. Shared apps stay
+		// visible to sub-accounts through the monitoring path
+		// (isAllowedMonitoringNamespace), not here. Admins still see shared.
 		return user.globalrole === ADMIN_ROLE
 			? userTarget || systemTarget || sharedTarget
-			: userTarget || sharedTarget;
+			: userTarget;
 	});
 	return {
 		...data,
@@ -152,16 +156,18 @@ function namespaceFormat(ctx, data) {
 	const user = getUserInfo(ctx);
 	const newData = data.items.filter((item) => {
 		const namespace = get(item, 'metadata.name');
-		const userTarget = namespace
-			.split('-')
-			.find((item) => item === user.username);
-		const systemTarget = systemNamespaces.find(
-			(system_namespace) => namespace === system_namespace
-		);
-		const sharedTarget = isShared(item);
+		// Ownership is the LAST '-'-segment of the namespace
+		// (`<app>-<owner>`, `user-space-<owner>`, `user-system-<owner>`), so
+		// match the owner suffix instead of any segment. Matching any segment
+		// would leak another account's namespace to a sub-account when an app
+		// is literally named like the sub-account (e.g. `<username>-<other>`).
+		// Sub-accounts (non-admin) therefore only see their own namespaces;
+		// system / shared / other-account namespaces are excluded here (shared
+		// stays visible via the monitoring path). Admins see everything.
+		const owned = namespace.endsWith(`-${user.username}`);
 		return user.globalrole === ADMIN_ROLE
 			? true
-			: userTarget || sharedTarget;
+			: owned;
 	});
 	return {
 		...data,
