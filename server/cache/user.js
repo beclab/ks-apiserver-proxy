@@ -10,17 +10,48 @@ const cache = {};
 const systemNamespaces = getSystemNamespaces()
 
 const SHARED_LABELS = ['bytetrade.io/ns-shared', 'app.bytetrade.io/app-shared'];
+// Shared apps always live in a deterministic `<app>-shared` namespace
+// (v3 `options.shared: true` -> `<app>-shared`; v2 shared sub-charts ->
+// `<chart>-shared`). This suffix is the single source of truth in
+// app-service.
+const SHARED_NS_SUFFIX = '-shared';
 
+// isShared decides whether a namespace object belongs to a shared app.
+//
+// Label check alone is not enough: the shared labels are only stamped once
+// Helm runs `AddApplicationLabelsToDeployment` during the Installing phase,
+// so a freshly-created `<app>-shared` namespace (early install window, or a
+// v2 shared sub-chart before its labels land) would be missed. We therefore
+// fall back to the deterministic namespace-name suffix, which is present from
+// the moment the namespace exists.
 const isShared = (item) => {
 	const labels = get(item, 'metadata.labels', {});
-	return SHARED_LABELS.some((label) => labels[label] === 'true');
+	if (SHARED_LABELS.some((label) => labels[label] === 'true')) {
+		return true;
+	}
+	const name = get(item, 'metadata.name');
+	return typeof name === 'string' && name.endsWith(SHARED_NS_SUFFIX);
 };
+
+// isOwnedNamespace decides whether `namespace` belongs to `username`.
+//
+// Ownership is the LAST '-'-segment of the namespace (`<app>-<owner>`,
+// `user-space-<owner>`, `user-system-<owner>`), so we match the `-<owner>`
+// suffix rather than any segment. Matching any segment (the previous
+// `split('-').includes(username)`) let another account's namespace match a
+// sub-account when an app was literally named like the user
+// (e.g. `<username>-<otherOwner>`), leaking it across accounts. The leading
+// `-` also prevents substring false-matches (e.g. `x<username>`).
+const isOwnedNamespace = (namespace, username) =>
+	typeof namespace === 'string' &&
+	!!username &&
+	namespace.endsWith(`-${username}`);
 
 const isAllowedMonitoringNamespace = (namespace, user) => {
 	if (!namespace || !user) {
 		return false;
 	}
-	const owned = namespace.split('-').includes(user.username);
+	const owned = isOwnedNamespace(namespace, user.username);
 	const shared = namespace.endsWith('-shared');
 	return owned || shared;
 };
@@ -112,16 +143,18 @@ function podListFormat(ctx, data) {
 	const user = getUserInfo(ctx);
 	const newData = data.items.filter((item) => {
 		const namespace = get(item, 'metadata.name');
-		const userTarget = namespace
-			.split('-')
-			.find((item) => item === user.username);
+		const userTarget = isOwnedNamespace(namespace, user.username);
 		const systemTarget = systemNamespaces.find(
 			(system_namespace) => namespace === system_namespace
 		);
 		const sharedTarget = isShared(item);
+		// Sub-accounts (non-admin) must NOT see shared namespaces in the
+		// namespace list — they can only see their own. Shared apps stay
+		// visible to sub-accounts through the monitoring path
+		// (isAllowedMonitoringNamespace), not here. Admins still see shared.
 		return user.globalrole === ADMIN_ROLE
 			? userTarget || systemTarget || sharedTarget
-			: userTarget || sharedTarget;
+			: userTarget;
 	});
 	return {
 		...data,
@@ -135,16 +168,14 @@ function namespaceFormat(ctx, data) {
 	const user = getUserInfo(ctx);
 	const newData = data.items.filter((item) => {
 		const namespace = get(item, 'metadata.name');
-		const userTarget = namespace
-			.split('-')
-			.find((item) => item === user.username);
-		const systemTarget = systemNamespaces.find(
-			(system_namespace) => namespace === system_namespace
-		);
-		const sharedTarget = isShared(item);
+		// Sub-accounts (non-admin) only see their own namespaces; system /
+		// shared / other-account namespaces are excluded here (shared stays
+		// visible via the monitoring path). Admins see everything. Ownership is
+		// the `-<owner>` suffix — see isOwnedNamespace.
+		const owned = isOwnedNamespace(namespace, user.username);
 		return user.globalrole === ADMIN_ROLE
 			? true
-			: userTarget || sharedTarget;
+			: owned;
 	});
 	return {
 		...data,
@@ -158,7 +189,7 @@ function namespaceListFormat(ctx, data) {
 	const user = getUserInfo(ctx);
 	const newData = data.items.filter((item) => {
 		const namespace = get(item, 'metadata.namespace');
-		const userTarget = namespace.split('-').includes(user.username);
+		const userTarget = isOwnedNamespace(namespace, user.username);
 		const systemTarget = systemNamespaces.find(
 			(system_namespace) => namespace === system_namespace
 		);

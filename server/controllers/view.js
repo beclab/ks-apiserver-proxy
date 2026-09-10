@@ -37,6 +37,7 @@ const {
 	isShared,
 	namespaceFormat
 } = require('../cache/user.js');
+const { OWNER, ADMIN } = require('../cache/user.config');
 
 const {
 	getServerConfig,
@@ -304,8 +305,7 @@ const monitoringMetric = async (ctx) => {
 };
 
 function endsWith(str, name) {
-	const regex = new RegExp(`-${name}$`);
-	return regex.test(str);
+	return typeof str === 'string' && !!name && str.endsWith(`-${name}`);
 }
 
 function buildNamespaceGroupBuckets(items, usersData) {
@@ -344,14 +344,26 @@ const namespaceGroup = async (ctx) => {
 	const SHARED = 'Shared';
 	const usersData = users.items.map((item) => ({
 		name: item.metadata.name,
-		creation_timestamp: item.metadata.creationTimestamp
+		creation_timestamp: item.metadata.creationTimestamp,
+		ownerRole: get(item, 'metadata.annotations["bytetrade.io/owner-role"]')
 	}));
 
+	// The main account is the cluster OWNER, identified by its owner-role
+	// annotation rather than by position in the iam user list (which has no
+	// ordering guarantee). Fall back to the last entry only when no
+	// owner/admin-role user is present, preserving the previous behavior.
 	let adminUser;
 	let otherUsers;
 	if (usersData.length > 0) {
-		otherUsers = usersData.slice(0, -1);
-		adminUser = usersData[usersData.length - 1];
+		let mainIdx = usersData.findIndex((u) => u.ownerRole === OWNER);
+		if (mainIdx < 0) {
+			mainIdx = usersData.findIndex((u) => u.ownerRole === ADMIN);
+		}
+		if (mainIdx < 0) {
+			mainIdx = usersData.length - 1;
+		}
+		adminUser = usersData[mainIdx];
+		otherUsers = usersData.filter((_, i) => i !== mainIdx);
 	} else {
 		otherUsers = [];
 	}
