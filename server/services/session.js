@@ -445,6 +445,8 @@ const getSystemNamespaces = () => [
 	'os-network',
 	'os-framework',
 	'os-gpu',
+	'os-mesh',
+	'os-gateway',
 	'kubesphere-monitoring-federated',
 	'kubesphere-controls-system',
 	'kubesphere-system',
