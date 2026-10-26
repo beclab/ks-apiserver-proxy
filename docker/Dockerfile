@@ -1,24 +1,20 @@
-FROM node:18.15.0-buster-slim as server_dist
+FROM node:26.12.1-trixie-slim AS server_dist
 
 WORKDIR /server_dist
 
-COPY package*.json ./
+COPY package.json package-lock.json ./
+RUN npm ci
 
-RUN yarn
+COPY scripts ./scripts
+COPY server ./server
+RUN npm run build
 
-ADD ./ ./
-
-RUN yarn add rimraf@5.0.7 -D && yarn build
-
-
-FROM node:18.15.0-buster-slim
+FROM node:26.12.1-trixie-slim
 
 EXPOSE 8000
 
 WORKDIR /server
-
 COPY --from=server_dist /server_dist/dist/ ./
 
 WORKDIR /server/main
-
-CMD [ "node", "server.js"]
+CMD ["node", "server.js"]

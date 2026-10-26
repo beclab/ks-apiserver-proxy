@@ -48,9 +48,8 @@
     "last 5 Opera versions"
   ],
   "engines": {
-    "node": ">= 12.22.1",
-    "npm": ">= 6.13.4",
-    "yarn": ">= 1.21.1"
+    "node": ">=26.12.1",
+    "npm": ">=11.20.0"
   },
   "devDependencies": {
     "@types/file-saver": "^2.0.5",
@@ -58,6 +57,7 @@
     "cross-env": "^7.0.3",
     "nodemon": "^2.0.21",
     "webpack": "^5.76.1",
-    "webpack-cli": "^5.0.1"
+    "webpack-cli": "^5.0.1",
+    "rimraf": "5.0.7"
   }
 }
